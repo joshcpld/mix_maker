@@ -16,4 +16,6 @@ With these two issues I action the following objectives across each of the scrip
 
 If you are interested in seeing the fruits of this project, you can listen to the produced mixes I've uploaded on my MixCloud account here: https://www.mixcloud.com/joshcpld/ .
 
-Due to the amount of data I worked with in this project (and the likelihood of copyright infringements) I haven't uploaded any of the music files themselves. However, if you're interested in looking at the scope of music in my dad's favourite music of all time you can look at the files in the documentation folder.
+Due to the amount of data I worked with in this project (and the likelihood of copyright infringements) I haven't uploaded any of the music files themselves. However, if you're interested in looking at the scope of music in my dad's favourite music of all time you can look at the files in the documentation folder. 
+
+Beyond the joy of creating something which allows me to share my dad's passion for music with the world, I found it really cathartic getting into my dad's head about his music archival system and why he set up his system the way it was. I wonder what he would have thought of this.
