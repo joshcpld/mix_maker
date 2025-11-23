@@ -12,7 +12,7 @@ With these two issues I action the following objectives across each of the scrip
 
 1. Transform the Microsoft Word documentation into a structerd, tidy dataset.
 2. Create a dataframe which links the clean music documentation with raw audio files.
-3. Actually apply the master music documentation to the audio files. For the purposes of sharing this music with others, I also construct a singular concatenated .mp4 file for each mix which can be uploaded MixCloud, as well as a corresponding text file which contains the tracklist with track starting times.
+3. Actually apply the master music documentation to the audio files. For the purposes of sharing this music with others, I also construct a singular concatenated .mp4 file for each mix which can be uploaded MixCloud, as well as a corresponding text file which contains the tracklist with track starting times. I also match one of his artworks to each of the tracks on a per mix basis (ig: @magentacicada).
 
 If you are interested in seeing the fruits of this project, you can listen to the produced mixes I've uploaded on my MixCloud account here: https://www.mixcloud.com/joshcpld/ .
 
