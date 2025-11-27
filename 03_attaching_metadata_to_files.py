@@ -31,7 +31,6 @@ PAINTINGS_ROOT     = "data/paintings"
 MASTER_DOC_PATH    = "data/documentation/documentation_master.csv"
 FADE_SEC           = 10        # crossfade length in seconds
 BITRATE            = "192k"    # ffmpeg output bitrate
-MAX_MIXES_THIS_RUN = 30        # how many mixes to render in this run (for batching)
 
 
 ########################################################################################################################
@@ -40,8 +39,15 @@ MAX_MIXES_THIS_RUN = 30        # how many mixes to render in this run (for batch
 
 documentation_df = pd.read_csv(MASTER_DOC_PATH)
 
-# One album/mix per distinct mix_name
-albums = sorted(documentation_df["mix_name"].dropna().unique())
+# One album/mix per folder (ensures Unknown tracks share correct art)
+albums = sorted(documentation_df["folder"].dropna().unique())
+
+# Within each folder, fill missing mix_id/mix_name from other tracks
+documentation_df[["mix_id", "mix_name"]] = (
+    documentation_df
+    .groupby("folder")[["mix_id", "mix_name"]]
+    .transform(lambda col: col.ffill().bfill())
+)
 
 ########################################################################################################################
 ######################################### 2. LIST AVAILABLE PAINTING FILES #############################################
@@ -76,7 +82,7 @@ for album in albums:
     idx += 1
 
 album_paintings_df = pd.DataFrame({
-    "mix_name": albums,
+    "folder": albums,
     "painting_file": [assignment[a] for a in albums]
 })
 
@@ -87,23 +93,54 @@ print(album_paintings_df.head())
 ########################### 4. COPY EACH PAINTING INTO ITS ALBUM FOLDER ###############################################
 ########################################################################################################################
 
-# Map mix_name -> folder from documentation (one row per mix_name/folder pair).
-album_folders = (
-    documentation_df[["mix_name", "folder"]]
-    .dropna()
-    .drop_duplicates()
-)
+# # Map mix_name -> folder from documentation (one row per mix_name/folder pair).
+# album_folders = (
+#     documentation_df[["mix_name", "folder"]]
+#     .dropna()
+#     .drop_duplicates()
+# )
 
-album_paintings_with_folders = album_paintings_df.merge(
-    album_folders,
-    on="mix_name",
-    how="left"
-)
+# album_paintings_with_folders = album_paintings_df.merge(
+#     album_folders,
+#     on="mix_name",
+#     how="left"
+# )
 
-for _, row in album_paintings_with_folders.iterrows():
-    mix_name = row["mix_name"]
-    painting_file = row["painting_file"]
+# for _, row in album_paintings_with_folders.iterrows():
+#     mix_name = row["mix_name"]
+#     painting_file = row["painting_file"]
+#     folder = row["folder"]
+
+#     if pd.isna(folder) or not isinstance(painting_file, str):
+#         continue
+
+#     src = os.path.join(PAINTINGS_ROOT, painting_file)
+#     dest_folder = os.path.join(MUSIC_ROOT, folder)
+#     os.makedirs(dest_folder, exist_ok=True)
+
+#     # Remove all other cover files from the folder 
+#     for f in os.listdir(dest_folder):
+#         if f.lower().endswith((".jpg", ".jpeg", ".png")):  # all old covers
+#             old = os.path.join(dest_folder, f)
+#             try:
+#                 os.remove(old)
+#                 print(f"[REMOVED OLD COVER] {old}")
+#             except Exception as e:
+#                 print(f"[ERROR REMOVING] {old}: {e}")
+
+#     # Copy in the new one
+#     dest = os.path.join(dest_folder, painting_file)
+
+#     if os.path.isfile(src):
+#         shutil.copy2(src, dest)
+#         print(f"[COPIED NEW COVER] {src} -> {dest}")
+#     else:
+#         print(f"[MISSING PAINTING] {src}")
+
+# We now assign paintings per *folder* (one cover per mix folder)
+for _, row in album_paintings_df.iterrows():
     folder = row["folder"]
+    painting_file = row["painting_file"]
 
     if pd.isna(folder) or not isinstance(painting_file, str):
         continue
@@ -112,14 +149,22 @@ for _, row in album_paintings_with_folders.iterrows():
     dest_folder = os.path.join(MUSIC_ROOT, folder)
     os.makedirs(dest_folder, exist_ok=True)
 
+    # Remove all other cover files from the folder 
+    for f in os.listdir(dest_folder):
+        if f.lower().endswith((".jpg", ".jpeg", ".png")):  # all old covers
+            old = os.path.join(dest_folder, f)
+            try:
+                os.remove(old)
+                print(f"[REMOVED OLD COVER] {old}")
+            except Exception as e:
+                print(f"[ERROR REMOVING] {old}: {e}")
+
+    # Copy in the new one
     dest = os.path.join(dest_folder, painting_file)
 
     if os.path.isfile(src):
-        if not os.path.exists(dest):
-            shutil.copy2(src, dest)
-            print(f"[COPIED] {src} -> {dest}")
-        else:
-            print(f"[SKIP - EXISTS] {dest}")
+        shutil.copy2(src, dest)
+        print(f"[COPIED NEW COVER] {src} -> {dest}")
     else:
         print(f"[MISSING PAINTING] {src}")
 
@@ -129,10 +174,9 @@ for _, row in album_paintings_with_folders.iterrows():
 
 documentation_with_art = documentation_df.merge(
     album_paintings_df,
-    on="mix_name",
+    on="folder",
     how="left"
 )
-
 ########################################################################################################################
 ##################### 6. TAG EACH AUDIO FILE WITH METADATA + COVER IMAGE ##############################################
 ########################################################################################################################
@@ -158,9 +202,39 @@ def tag_file(row):
         audio.add_tags()
 
     # Core tags
+    mix_id_raw   = row.get("mix_id")
+    mix_name_raw = row.get("mix_name")
+
+    mix_id   = "" if pd.isna(mix_id_raw) else str(mix_id_raw)
+    mix_name = "" if pd.isna(mix_name_raw) else str(mix_name_raw)
+
+    # Album formatting rules:
+    # Both exist →    "12345: Car CD 03"
+    # Only name →     "Car CD 03"
+    # Only id →       "12345"
+    # Neither →       folder name or "Unknown Mix"
+    if mix_id and mix_name:
+        album_title = f"{mix_id}: {mix_name}"
+    elif mix_name:
+        album_title = mix_name
+    elif mix_id:
+        album_title = mix_id
+    else:
+        album_title = str(row.get("folder", "Unknown Mix")).strip()
+
     audio["\xa9ART"] = [str(row["artist"])]
     audio["\xa9nam"] = [str(row["title"])]
-    audio["\xa9alb"] = [str(row["mix_name"])]
+    audio["\xa9alb"] = [album_title]
+
+    # Global uniform composer tag
+    audio["\xa9wrt"] = ["Greg Copeland"]          # Composer field
+
+    # Mark as a compilation
+    audio["cpil"] = True                          # Boolean flag for 'Part of compilation'
+
+    if "track_index" in row and not pd.isna(row["track_index"]):
+        audio["trkn"] = [(int(row["track_index"]), 0)]  
+
 
     # Cover art tag from the assigned painting
     painting_file = row.get("painting_file")
@@ -319,106 +393,3 @@ for mix_name, group in documentation_df.groupby("mix_name"):
 
     print(f"Tracklist written to: {output_path}")
 
-########################################################################################################################
-############################################ CREATING MIX TRACKS #######################################################
-########################################################################################################################
-
-# Finally, create single crossfaded mix files per folder using ffmpeg.
-# Requires ffmpeg installed and available on PATH.
-
-def build_crossfade_mix_for_folder(folder_path, fade_sec=FADE_SEC, bitrate=BITRATE):
-    """
-    Build a crossfaded mix for all .m4a files in a folder.
-    Output file: <folder_name>.m4a in the same folder, with NO metadata.
-    """
-    folder_abs = os.path.abspath(folder_path)
-    print(f"\n=== Processing folder: {folder_abs} ===")
-
-    # Only original track files, skip existing test/xfade outputs.
-    files = [
-        f for f in os.listdir(folder_abs)
-        if f.lower().endswith(".m4a")
-        and "test" not in f.lower()
-        and "xfade" not in f.lower()
-    ]
-    files.sort()
-
-    print("Found track files:", files)
-    if len(files) < 2:
-        print("⚠️  Not enough tracks (need at least 2). Skipping.")
-        return
-
-    input_paths = [os.path.join(folder_abs, f) for f in files]
-
-    # Output file named after the folder (mix).
-    mix_name = os.path.basename(folder_abs)
-    output_file = os.path.join(folder_abs, f"{mix_name}.m4a")
-
-    if os.path.exists(output_file):
-        print("✅ Output already exists, skipping:", output_file)
-        return
-
-    cmd = ["ffmpeg", "-y"]  # overwrite without asking
-
-    # Add each track as an input.
-    for p in input_paths:
-        print("Input:", p, "| exists:", os.path.isfile(p))
-        cmd.extend(["-i", p])
-
-    # Build the acrossfade filter chain.
-    filter_parts = []
-    prev_label = "0:a"
-
-    for i in range(1, len(input_paths)):
-        in_label = f"{i}:a"
-        out_label = f"a{i:02d}"
-        part = (
-            f"[{prev_label}][{in_label}]"
-            f"acrossfade=d={fade_sec}:c1=tri:c2=tri"
-            f"[{out_label}]"
-        )
-        filter_parts.append(part)
-        prev_label = out_label
-
-    filter_complex = ";".join(filter_parts)
-
-    cmd.extend([
-        "-filter_complex", filter_complex,
-        "-map", f"[{prev_label}]",  # final mixed audio
-        "-map_metadata", "-1",      # strip all metadata
-        "-c:a", "aac",
-        "-b:a", bitrate,
-        output_file,
-    ])
-
-    print("\nRunning command:")
-    print(" ".join(cmd), "\n")
-
-    start = time.time()
-    process = subprocess.Popen(cmd)
-    process.wait()
-    elapsed_min = (time.time() - start) / 60
-
-    if process.returncode == 0:
-        print(f"🎉 Done: {output_file}")
-        print(f"⏱  Elapsed time: {elapsed_min:.2f} minutes")
-    else:
-        print("❌ ffmpeg failed:", process.returncode)
-
-# Use batching so you can run mixes in chunks instead of all at once.
-mix_folders = (
-    documentation_df[["mix_name", "folder"]]
-    .drop_duplicates()
-    .reset_index(drop=True)
-)
-
-print("Total mixes detected:", len(mix_folders))
-print(f"Processing up to {MAX_MIXES_THIS_RUN} mixes in this run.")
-
-for idx, row in mix_folders.head(MAX_MIXES_THIS_RUN).iterrows():
-    mix_name = row["mix_name"]
-    rel_folder = row["folder"]
-    folder_path = os.path.join(MUSIC_ROOT, rel_folder)
-
-    print(f"\n### [{idx+1}] Mix: {mix_name}")
-    build_crossfade_mix_for_folder(folder_path)

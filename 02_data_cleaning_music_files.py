@@ -279,11 +279,11 @@ metadata_cols = ["artist", "title", "from_cd_artist", "from_cd_title"]
 df_eight_digits_joined.loc[na_mask, metadata_cols] = "Unknown"
 
 # For these unknown rows, derive mix_id and mix_name directly from the folder name.
-folder_series = df_eight_digits_joined.loc[na_mask, "folder"]
-df_eight_digits_joined.loc[na_mask, ["mix_id", "mix_name"]] = pd.DataFrame({
-    "mix_id": folder_series.str.replace(" ", "", regex=False),
-    "mix_name": folder_series
-}).values
+# folder_series = df_eight_digits_joined.loc[na_mask, "folder"]
+# df_eight_digits_joined.loc[na_mask, ["mix_id", "mix_name"]] = pd.DataFrame({
+#     "mix_id": folder_series.str.replace(" ", "", regex=False),
+#     "mix_name": folder_series
+# }).values
 
 # Flag unknown tracks for reference
 df_eight_digits_joined["is_unknown_track"] = na_mask
@@ -304,6 +304,8 @@ df_eight_digits_joined = df_eight_digits_joined.drop(
     columns=["name_category", "unknown", "row_number", "is_unknown_track", "from_cd_title"],
     errors="ignore"  # ignore in case some columns don’t exist in certain runs
 )
+
+# Final inspection
 
 print("Final master documentation sample:")
 print(df_eight_digits_joined.head(20))
